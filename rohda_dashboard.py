@@ -15,6 +15,7 @@ st.set_page_config(
 # --- Google Sheet Configuration ---
 SHEET_ID = "1fikJsJ8rFry3YHdfv-Zl3J7UVf3VtIIFhg_DbcMBOjo"
 GPS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid=734190721"
+WELLNESS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid=220314467"
 
 # --- Rohda Brand Colors ---
 ROHDA_RED = "#C8102E"
@@ -152,9 +153,44 @@ def load_gps_data():
     except Exception as e:
         return None, str(e)
 
+@st.cache_data(ttl=300)
+def load_wellness_data():
+    """Load wellness data from Google Sheets."""
+    try:
+        df = pd.read_csv(WELLNESS_CSV_URL)
+        # Rename the long Microsoft Forms column names to short ones
+        col_map = {}
+        for col in df.columns:
+            if "Fatigue" in col: col_map[col] = "Fatigue"
+            elif "Sleep" in col: col_map[col] = "Sleep"
+            elif "Soreness" in col: col_map[col] = "Soreness"
+            elif "Stress" in col: col_map[col] = "Stress"
+            elif "Mood" in col: col_map[col] = "Mood"
+            elif "Begintijd" in col: col_map[col] = "Timestamp"
+        df = df.rename(columns=col_map)
+        if "Timestamp" in df.columns:
+            df["Timestamp"] = pd.to_datetime(df["Timestamp"])
+            df["Date"] = df["Timestamp"].dt.date
+        # Keep only relevant columns
+        wellness_cols = ["Timestamp", "Date", "Name", "Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
+        available_cols = [c for c in wellness_cols if c in df.columns]
+        df = df[available_cols]
+        # Calculate total wellness score (sum of 5 items, max 25)
+        score_cols = ["Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
+        available_scores = [c for c in score_cols if c in df.columns]
+        if available_scores:
+            df["Total Score"] = df[available_scores].sum(axis=1)
+        return df, None
+    except Exception as e:
+        return None, str(e)
+
 # Load data from Google Sheets
 with st.spinner("Loading data from Google Sheets..."):
     df, load_error = load_gps_data()
+    df_wellness, wellness_error = load_wellness_data()
+
+if wellness_error:
+    df_wellness = pd.DataFrame()  # Empty — wellness tab will show a message
 
 if load_error:
     st.error(f"Could not load data from Google Sheets: {load_error}")
@@ -241,7 +277,7 @@ st.sidebar.markdown(f"**👥 Players:** {df_filtered['Player Name'].nunique()}")
 # =====================================================
 # TABS
 # =====================================================
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Activity Overview", "⚖️ A/C Ratios", "🚦 Squad Status", "🏆 Leaderboard"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Activity Overview", "⚖️ A/C Ratios", "🚦 Squad Status", "💚 Wellness", "🏆 Leaderboard"])
 
 # =====================================================
 # TAB 1: ACTIVITY OVERVIEW
@@ -480,9 +516,148 @@ with tab3:
         st.info("Not enough data for squad status.")
 
 # =====================================================
-# TAB 4: LEADERBOARD
+# TAB 4: WELLNESS
 # =====================================================
 with tab4:
+    st.markdown(f'<div class="section-header">💚 Wellness Overview</div>', unsafe_allow_html=True)
+    st.markdown("Daily self-reported wellness scores from player questionnaires.")
+    st.markdown("---")
+
+    if df_wellness is not None and len(df_wellness) > 0:
+        WELLNESS_ITEMS = ["Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
+        available_items = [c for c in WELLNESS_ITEMS if c in df_wellness.columns]
+
+        # Summary: latest scores per player (most recent entry per player)
+        latest_wellness = df_wellness.sort_values("Timestamp").drop_duplicates(subset="Name", keep="last")
+
+        st.markdown("### 📋 Latest Wellness Scores")
+        st.markdown("Most recent submission per player.")
+        st.markdown("")
+
+        # Squad average
+        if available_items and len(latest_wellness) > 0:
+            avg_cols = st.columns(len(available_items) + 1)
+            for i, item in enumerate(available_items):
+                avg_val = latest_wellness[item].mean()
+                avg_cols[i].metric(item, f"{avg_val:.1f} / 5")
+            if "Total Score" in latest_wellness.columns:
+                avg_total = latest_wellness["Total Score"].mean()
+                avg_cols[-1].metric("Total", f"{avg_total:.1f} / 25")
+
+            st.markdown("---")
+
+            # Player wellness cards
+            def get_wellness_color(score):
+                if score <= 2: return "🔴"
+                elif score <= 3: return "🟠"
+                else: return "🟢"
+
+            def get_total_wellness_color(score):
+                if score <= 10: return "🔴"
+                elif score <= 15: return "🟠"
+                elif score <= 20: return "🟢"
+                else: return "🟢"
+
+            # Build card grid
+            cards_html = "<div style='display:grid;grid-template-columns:repeat(4, 1fr);gap:0.5rem;'>"
+            for _, row in latest_wellness.sort_values("Total Score", ascending=True).iterrows():
+                name = row["Name"]
+                total = row.get("Total Score", 0)
+                total_icon = get_total_wellness_color(total)
+
+                if total <= 10:
+                    card_bg, border = "#4a0e0e", ROHDA_RED
+                    badge_bg, badge_text = "#c62828", "LOW"
+                elif total <= 15:
+                    card_bg, border = "#3e2f0e", ROHDA_YELLOW
+                    badge_bg, badge_text = "#f57f17", "MODERATE"
+                elif total <= 20:
+                    card_bg, border = "#0e2e0e", ROHDA_GREEN
+                    badge_bg, badge_text = "#2e7d32", "GOOD"
+                else:
+                    card_bg, border = "#0e2e0e", ROHDA_GREEN
+                    badge_bg, badge_text = "#1b5e20", "EXCELLENT"
+
+                metric_lines = ""
+                for item in available_items:
+                    val = row.get(item, 0)
+                    icon = get_wellness_color(val)
+                    metric_lines += (
+                        f"<tr><td style='color:#aaa;font-size:0.75rem;padding:2px 4px;'>{item}</td>"
+                        f"<td style='text-align:right;font-weight:700;font-size:0.85rem;padding:2px 4px;'>"
+                        f"{icon} {int(val)}/5</td></tr>"
+                    )
+                metric_lines += (
+                    f"<tr><td style='color:{ROHDA_YELLOW};font-size:0.75rem;padding:4px 4px 2px;font-weight:700;"
+                    f"border-top:1px solid rgba(255,255,255,0.2);'>TOTAL</td>"
+                    f"<td style='text-align:right;font-weight:700;font-size:0.95rem;padding:4px 4px 2px;"
+                    f"color:{ROHDA_YELLOW};border-top:1px solid rgba(255,255,255,0.2);'>{total_icon} {int(total)}/25</td></tr>"
+                )
+
+                date_str = row["Timestamp"].strftime("%d-%m-%Y %H:%M") if pd.notna(row.get("Timestamp")) else ""
+
+                cards_html += (
+                    f"<div style='background:linear-gradient(145deg,{card_bg},#1a1a2e);border:2px solid {border};"
+                    f"border-radius:12px;padding:0.8rem;color:white;box-shadow:0 4px 12px rgba(0,0,0,0.3);'>"
+                    f"<table style='width:100%;border:none;border-collapse:collapse;'>"
+                    f"<tr><td style='font-size:0.95rem;font-weight:700;padding-bottom:6px;'>{name}</td>"
+                    f"<td style='text-align:right;'><span style='background:{badge_bg};color:white;font-size:0.6rem;"
+                    f"font-weight:700;padding:2px 6px;border-radius:3px;'>{badge_text}</span></td></tr>"
+                    f"{metric_lines}"
+                    f"<tr><td colspan='2' style='color:#666;font-size:0.65rem;padding-top:4px;'>{date_str}</td></tr>"
+                    f"</table></div>"
+                )
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
+
+            # Compliance check
+            st.markdown("---")
+            st.markdown("### 📊 Compliance")
+            all_players = sorted(df_filtered["Player Name"].unique())
+            submitted_players = latest_wellness["Name"].unique()
+
+            # Name matching (Forms names may differ slightly from GPS names)
+            submitted_lower = [n.lower().strip() for n in submitted_players]
+            missing_players = [p for p in all_players if p.lower().strip() not in submitted_lower]
+
+            comp_col1, comp_col2 = st.columns(2)
+            with comp_col1:
+                st.metric("✅ Submitted", len(submitted_players))
+            with comp_col2:
+                st.metric("❌ Missing", len(missing_players))
+
+            if missing_players:
+                st.markdown("**Players who haven't submitted today:**")
+                st.markdown(", ".join(missing_players))
+
+            # History table
+            st.markdown("---")
+            st.markdown("### 📅 All Submissions")
+            display_wellness = df_wellness.copy()
+            if "Timestamp" in display_wellness.columns:
+                display_wellness["Timestamp"] = display_wellness["Timestamp"].dt.strftime("%d-%m-%Y %H:%M")
+            show_cols = ["Timestamp", "Name"] + available_items
+            if "Total Score" in display_wellness.columns:
+                show_cols.append("Total Score")
+            st.dataframe(
+                display_wellness[show_cols].sort_values("Timestamp", ascending=False).reset_index(drop=True),
+                use_container_width=True, hide_index=True
+            )
+    else:
+        st.info("No wellness data available yet. Once players start submitting the daily wellness form, their scores will appear here.")
+        st.markdown("")
+        st.markdown("**How it works:**")
+        st.markdown("""
+        1. Players receive a daily email at 7:30 AM with a link to the wellness form
+        2. They rate 5 items (Fatigue, Sleep, Soreness, Stress, Mood) on a 1-5 scale
+        3. Responses are collected in the Google Sheet
+        4. This tab shows the latest scores, player cards, and compliance tracking
+        """)
+
+# =====================================================
+# TAB 5: LEADERBOARD
+# =====================================================
+with tab5:
     st.markdown(f'<div class="section-header">🏆 Leaderboard — Season {selected_season}</div>', unsafe_allow_html=True)
     st.markdown("---")
 
