@@ -14,7 +14,7 @@ st.set_page_config(
 
 # --- Google Sheet Configuration ---
 SHEET_ID = "1fikJsJ8rFry3YHdfv-Zl3J7UVf3VtIIFhg_DbcMBOjo"
-GPS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid=734190721"
+GPS_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&gid=734190721"
 
 # --- Rohda Brand Colors ---
 ROHDA_RED = "#C8102E"
