@@ -169,15 +169,18 @@ def load_wellness_data():
             elif "Begintijd" in col: col_map[col] = "Timestamp"
         df = df.rename(columns=col_map)
         if "Timestamp" in df.columns:
-            df["Timestamp"] = pd.to_datetime(df["Timestamp"])
+            df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
             df["Date"] = df["Timestamp"].dt.date
         # Keep only relevant columns
         wellness_cols = ["Timestamp", "Date", "Name", "Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
         available_cols = [c for c in wellness_cols if c in df.columns]
         df = df[available_cols]
-        # Calculate total wellness score (sum of 5 items, max 25)
+        # Convert score columns to numeric (they may come as text from Power Automate)
         score_cols = ["Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
         available_scores = [c for c in score_cols if c in df.columns]
+        for col in available_scores:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
+        # Calculate total wellness score (sum of 5 items, max 25)
         if available_scores:
             df["Total Score"] = df[available_scores].sum(axis=1)
         return df, None
