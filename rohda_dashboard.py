@@ -281,8 +281,17 @@ new_activity_files = st.file_uploader(
     accept_multiple_files=True
 )
 
+# Track which files we've already processed this session
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = set()
+
 if new_activity_files:
     for new_activity_file in new_activity_files:
+        # Skip if we've already processed this file
+        file_key = f"{new_activity_file.name}_{new_activity_file.size}"
+        if file_key in st.session_state.processed_files:
+            continue
+        
         try:
             new_data, detected_season = convert_statsports_csv(new_activity_file)
             new_session_name = new_data["Session Name"].iloc[0]
@@ -294,7 +303,7 @@ if new_activity_files:
                 (df["Session Date"] == new_data["Session Date"].iloc[0])
             ]
             if len(existing_check) > 0:
-                st.warning(f"⚠️ **{new_session_name}** ({new_session_date}) already exists. Skipping.")
+                st.info(f"ℹ️ **{new_session_name}** ({new_session_date}) already in database.")
             else:
                 # Save to Google Sheets permanently
                 saved, save_error = append_to_google_sheet(new_data)
@@ -303,9 +312,11 @@ if new_activity_files:
                     st.success(f"✅ **{new_session_name}** ({new_session_date}) saved permanently! "
                               f"Type: {new_session_type} | Players: {n_players} | Season: {detected_season}")
                 else:
-                    # Still merge in memory even if save fails
                     df = pd.concat([df, new_data], ignore_index=True)
-                    st.warning(f"⚠️ **{new_session_name}** merged for this session but could not save to Google Sheets: {save_error}")
+                    st.warning(f"⚠️ **{new_session_name}** merged but could not save to Google Sheets: {save_error}")
+            
+            # Mark as processed
+            st.session_state.processed_files.add(file_key)
         except Exception as e:
             st.error(f"❌ Error converting {new_activity_file.name}: {str(e)}")
     # Clear the cache so next reload picks up the new data from Google Sheets
