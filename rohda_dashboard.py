@@ -165,13 +165,16 @@ def append_to_google_sheet(new_data):
         # Convert dates to string and handle NaN/None for Google Sheets
         write_data = new_data.copy()
         write_data["Session Date"] = write_data["Session Date"].dt.strftime("%Y-%m-%d")
+        # Replace NaN/None with empty strings and convert everything to native Python types
         write_data = write_data.fillna("")
-        # Convert to list of lists (without header)
-        rows = write_data.values.tolist()
+        rows = []
+        for _, row in write_data.iterrows():
+            rows.append([str(v) if v != "" else "" for v in row.values])
         worksheet.append_rows(rows, value_input_option="USER_ENTERED")
         return True, None
     except Exception as e:
-        return False, f"Sheet write error: {str(e)}"
+        import traceback
+        return False, f"{type(e).__name__}: {str(e)} | {traceback.format_exc()[-200:]}"
 
 METRICS = {
     "Totale afstand": "Total Distance",
