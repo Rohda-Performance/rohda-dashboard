@@ -204,8 +204,8 @@ def load_gps_data():
     """Load GPS data from Google Sheets."""
     try:
         df = pd.read_csv(GPS_CSV_URL)
-        # Handle mixed date formats (DD/MM/YYYY from original data, YYYY-MM-DD from auto-saved data)
-        df["Session Date"] = pd.to_datetime(df["Session Date"], format="mixed", dayfirst=True)
+        # Handle mixed date formats: original data may be M/D/YYYY, auto-saved is YYYY-MM-DD
+        df["Session Date"] = pd.to_datetime(df["Session Date"], format="mixed", dayfirst=False)
         return df, None
     except Exception as e:
         return None, str(e)
