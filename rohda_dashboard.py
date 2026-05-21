@@ -160,12 +160,25 @@ def append_to_google_sheet(new_data):
     if error:
         return False, f"Auth error: {error}"
     try:
-        sheet = client.open_by_key(SHEET_ID)
+        # Try listing all sheets to verify access
+        all_sheets = client.openall()
+        sheet_names = [s.title for s in all_sheets]
+        
+        # Find our sheet
+        sheet = None
+        for s in all_sheets:
+            if s.id == SHEET_ID:
+                sheet = s
+                break
+        
+        if sheet is None:
+            # Try by URL as fallback
+            sheet = client.open_by_url(f"https://docs.google.com/spreadsheets/d/{SHEET_ID}")
+        
         worksheet = sheet.worksheet("GPS_Data")
         # Convert dates to string and handle NaN/None for Google Sheets
         write_data = new_data.copy()
         write_data["Session Date"] = write_data["Session Date"].dt.strftime("%Y-%m-%d")
-        # Replace NaN/None with empty strings and convert everything to native Python types
         write_data = write_data.fillna("")
         rows = []
         for _, row in write_data.iterrows():
@@ -174,7 +187,7 @@ def append_to_google_sheet(new_data):
         return True, None
     except Exception as e:
         import traceback
-        return False, f"{type(e).__name__}: {str(e)} | {traceback.format_exc()[-200:]}"
+        return False, f"{type(e).__name__}: {str(e)} | Accessible sheets: {sheet_names if 'sheet_names' in dir() else 'unknown'}"
 
 METRICS = {
     "Totale afstand": "Total Distance",
