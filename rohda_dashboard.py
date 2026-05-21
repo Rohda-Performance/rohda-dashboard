@@ -141,6 +141,9 @@ def get_gspread_client():
     """Get authenticated gspread client using Streamlit secrets."""
     try:
         creds_dict = dict(st.secrets["gcp_service_account"])
+        # Fix private key: replace literal \n with actual newlines
+        if "private_key" in creds_dict:
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive",
@@ -159,15 +162,16 @@ def append_to_google_sheet(new_data):
     try:
         sheet = client.open_by_key(SHEET_ID)
         worksheet = sheet.worksheet("GPS_Data")
-        # Convert dates to string for Google Sheets
+        # Convert dates to string and handle NaN/None for Google Sheets
         write_data = new_data.copy()
         write_data["Session Date"] = write_data["Session Date"].dt.strftime("%Y-%m-%d")
+        write_data = write_data.fillna("")
         # Convert to list of lists (without header)
         rows = write_data.values.tolist()
         worksheet.append_rows(rows, value_input_option="USER_ENTERED")
         return True, None
     except Exception as e:
-        return False, str(e)
+        return False, f"Sheet write error: {str(e)}"
 
 METRICS = {
     "Totale afstand": "Total Distance",
