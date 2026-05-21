@@ -109,15 +109,17 @@ def calculate_ac_ratios(player_data, metrics):
 def convert_statsports_csv(csv_file):
     raw = pd.read_csv(csv_file)
     is_match = "Drill Title" in raw.columns
-    if is_match:
-        converted = raw.rename(columns={
-            "Total Distance": "Totale afstand",
-            "High Intensity Distance": "Hoge intensiteit afstand",
-            "Distance per min": "Afstand per minuut",
-        })
-    else:
-        converted = raw.copy()
+    
+    # Always rename English columns to Dutch (works for both match and practice)
+    converted = raw.rename(columns={
+        "Total Distance": "Totale afstand",
+        "High Intensity Distance": "Hoge intensiteit afstand",
+        "Distance per min": "Afstand per minuut",
+    })
+    
+    if not is_match:
         converted["Drill Title"] = None
+    
     converted["Session Date"] = pd.to_datetime(converted["Session Date"], dayfirst=True)
     date_sample = converted["Session Date"].iloc[0]
     if date_sample.month >= 7:
@@ -153,32 +155,43 @@ def load_gps_data():
     except Exception as e:
         return None, str(e)
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)  # Cache for 1 minute (shorter for testing)
 def load_wellness_data():
     """Load wellness data from Google Sheets."""
     try:
-        df = pd.read_csv(WELLNESS_CSV_URL)
+        df = pd.read_csv(WELLNESS_CSV_URL, dtype=str)  # Read everything as string first
+        # Drop the PowerAppsId column if present
+        df = df.drop(columns=[c for c in df.columns if "PowerApps" in c], errors="ignore")
+        # Drop completely empty rows
+        df = df.dropna(how="all")
         # Rename the long Microsoft Forms column names to short ones
         col_map = {}
         for col in df.columns:
-            if "Fatigue" in col: col_map[col] = "Fatigue"
-            elif "Sleep" in col: col_map[col] = "Sleep"
-            elif "Soreness" in col: col_map[col] = "Soreness"
-            elif "Stress" in col: col_map[col] = "Stress"
-            elif "Mood" in col: col_map[col] = "Mood"
-            elif "Begintijd" in col: col_map[col] = "Timestamp"
+            col_lower = col.lower()
+            if "fatigue" in col_lower: col_map[col] = "Fatigue"
+            elif "sleep" in col_lower: col_map[col] = "Sleep"
+            elif "soreness" in col_lower: col_map[col] = "Soreness"
+            elif "stress" in col_lower: col_map[col] = "Stress"
+            elif "mood" in col_lower: col_map[col] = "Mood"
+            elif "begintijd" in col_lower or "timestamp" in col_lower: col_map[col] = "Timestamp"
+            elif "name" in col_lower and "naam" not in col_lower: col_map[col] = "Name"
         df = df.rename(columns=col_map)
+        # Parse timestamp
         if "Timestamp" in df.columns:
-            df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+            df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce", dayfirst=True)
             df["Date"] = df["Timestamp"].dt.date
         # Keep only relevant columns
         wellness_cols = ["Timestamp", "Date", "Name", "Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
         available_cols = [c for c in wellness_cols if c in df.columns]
         df = df[available_cols]
-        # Convert score columns to numeric (they may come as text from Power Automate)
+        # Drop rows where Name is empty
+        if "Name" in df.columns:
+            df = df[df["Name"].notna() & (df["Name"].str.strip() != "")]
+        # Convert score columns to numeric (strip any quotes/spaces first)
         score_cols = ["Fatigue", "Sleep", "Soreness", "Stress", "Mood"]
         available_scores = [c for c in score_cols if c in df.columns]
         for col in available_scores:
+            df[col] = df[col].astype(str).str.strip().str.replace("'", "").str.replace('"', '')
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
         # Calculate total wellness score (sum of 5 items, max 25)
         if available_scores:
