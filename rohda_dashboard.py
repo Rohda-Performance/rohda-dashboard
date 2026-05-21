@@ -4,6 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -135,6 +137,38 @@ def convert_statsports_csv(csv_file):
     converted = converted[expected_cols]
     return converted, season
 
+def get_gspread_client():
+    """Get authenticated gspread client using Streamlit secrets."""
+    try:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client, None
+    except Exception as e:
+        return None, str(e)
+
+def append_to_google_sheet(new_data):
+    """Append new rows to the GPS_Data tab in Google Sheets."""
+    client, error = get_gspread_client()
+    if error:
+        return False, f"Auth error: {error}"
+    try:
+        sheet = client.open_by_key(SHEET_ID)
+        worksheet = sheet.worksheet("GPS_Data")
+        # Convert dates to string for Google Sheets
+        write_data = new_data.copy()
+        write_data["Session Date"] = write_data["Session Date"].dt.strftime("%Y-%m-%d")
+        # Convert to list of lists (without header)
+        rows = write_data.values.tolist()
+        worksheet.append_rows(rows, value_input_option="USER_ENTERED")
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 METRICS = {
     "Totale afstand": "Total Distance",
     "Hoge intensiteit afstand": "High Intensity Distance",
@@ -220,7 +254,7 @@ if load_error:
 
 # Optional: merge new StatSports CSVs (multiple allowed)
 new_activity_files = st.file_uploader(
-    "➕ Add new StatSports CSV exports (you can select multiple files)",
+    "➕ Add new StatSports CSV exports (automatically saved to Google Sheets)",
     type=["csv"],
     key="activity_upload",
     accept_multiple_files=True
@@ -241,12 +275,20 @@ if new_activity_files:
             if len(existing_check) > 0:
                 st.warning(f"⚠️ **{new_session_name}** ({new_session_date}) already exists. Skipping.")
             else:
-                df = pd.concat([df, new_data], ignore_index=True)
-                st.success(f"✅ **{new_session_name}** ({new_session_date}) merged! "
-                          f"Type: {new_session_type} | Players: {n_players} | Season: {detected_season}")
+                # Save to Google Sheets permanently
+                saved, save_error = append_to_google_sheet(new_data)
+                if saved:
+                    df = pd.concat([df, new_data], ignore_index=True)
+                    st.success(f"✅ **{new_session_name}** ({new_session_date}) saved permanently! "
+                              f"Type: {new_session_type} | Players: {n_players} | Season: {detected_season}")
+                else:
+                    # Still merge in memory even if save fails
+                    df = pd.concat([df, new_data], ignore_index=True)
+                    st.warning(f"⚠️ **{new_session_name}** merged for this session but could not save to Google Sheets: {save_error}")
         except Exception as e:
             st.error(f"❌ Error converting {new_activity_file.name}: {str(e)}")
-    st.caption("💡 To permanently add this data, paste it into the Google Sheet.")
+    # Clear the cache so next reload picks up the new data from Google Sheets
+    load_gps_data.clear()
 
 # --- Process Data ---
 df = df.sort_values(["Player Name", "Session Date"])
