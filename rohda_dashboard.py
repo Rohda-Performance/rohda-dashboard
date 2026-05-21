@@ -218,33 +218,35 @@ if load_error:
     else:
         st.stop()
 
-# Optional: merge a new StatSports CSV
-new_activity_file = st.file_uploader(
-    "➕ Add new StatSports CSV export (optional — merges with existing data for this session only)",
+# Optional: merge new StatSports CSVs (multiple allowed)
+new_activity_files = st.file_uploader(
+    "➕ Add new StatSports CSV exports (you can select multiple files)",
     type=["csv"],
-    key="activity_upload"
+    key="activity_upload",
+    accept_multiple_files=True
 )
 
-if new_activity_file is not None:
-    try:
-        new_data, detected_season = convert_statsports_csv(new_activity_file)
-        new_session_name = new_data["Session Name"].iloc[0]
-        new_session_date = new_data["Session Date"].iloc[0].strftime("%d-%m-%Y")
-        new_session_type = new_data["Session Type"].iloc[0]
-        n_players = new_data["Player Name"].nunique()
-        existing_check = df[
-            (df["Session Name"] == new_session_name) &
-            (df["Session Date"] == new_data["Session Date"].iloc[0])
-        ]
-        if len(existing_check) > 0:
-            st.warning(f"⚠️ **{new_session_name}** ({new_session_date}) already exists. Skipping merge.")
-        else:
-            df = pd.concat([df, new_data], ignore_index=True)
-            st.success(f"✅ **{new_session_name}** ({new_session_date}) merged for this session! "
-                      f"Type: {new_session_type} | Players: {n_players} | Season: {detected_season}")
-            st.caption("💡 To permanently add this data, paste it into the Google Sheet.")
-    except Exception as e:
-        st.error(f"❌ Error converting StatSports file: {str(e)}")
+if new_activity_files:
+    for new_activity_file in new_activity_files:
+        try:
+            new_data, detected_season = convert_statsports_csv(new_activity_file)
+            new_session_name = new_data["Session Name"].iloc[0]
+            new_session_date = new_data["Session Date"].iloc[0].strftime("%d-%m-%Y")
+            new_session_type = new_data["Session Type"].iloc[0]
+            n_players = new_data["Player Name"].nunique()
+            existing_check = df[
+                (df["Session Name"] == new_session_name) &
+                (df["Session Date"] == new_data["Session Date"].iloc[0])
+            ]
+            if len(existing_check) > 0:
+                st.warning(f"⚠️ **{new_session_name}** ({new_session_date}) already exists. Skipping.")
+            else:
+                df = pd.concat([df, new_data], ignore_index=True)
+                st.success(f"✅ **{new_session_name}** ({new_session_date}) merged! "
+                          f"Type: {new_session_type} | Players: {n_players} | Season: {detected_season}")
+        except Exception as e:
+            st.error(f"❌ Error converting {new_activity_file.name}: {str(e)}")
+    st.caption("💡 To permanently add this data, paste it into the Google Sheet.")
 
 # --- Process Data ---
 df = df.sort_values(["Player Name", "Session Date"])
