@@ -196,6 +196,37 @@ METRICS = {
     "DSL": "Dynamic Stress Load",
 }
 
+# --- Current Squad 2026-2027 ---
+CURRENT_SQUAD = [
+    "Amos Wesseh",
+    "Anthony van Zaltbommel",
+    "Casper van der Veen",
+    "Diego Paais",
+    "Don van Rossum",
+    "Ebi Willemsen",
+    "Fabian te Kolsté",
+    "Gijs Blanke",
+    "Ivan van den Berg",
+    "Jaydey Hansler",
+    "Jon Vossebeld",
+    "Kem Roeloffzen",
+    "Luuk Schepers",
+    "Manuel Iylia",
+    "Martijn van de Werken",
+    "Matthias Heiland",
+    "Maurice van Bussel",
+    "Max Blanke",
+    "Quinten Jony",
+    "Rick Vreeswijk",
+    "Sten Brand",
+    "Sven Pazie",
+    "Teije ten Den",
+    "Thom Strijland",
+    "Tim Maatman",
+    "Tyrese Gijsbertha",
+    "Wesley Hansler",
+]
+
 # --- Data Loading ---
 st.markdown("---")
 
@@ -704,23 +735,57 @@ with tab4:
 
             # Compliance check
             st.markdown("---")
-            st.markdown("### 📊 Compliance")
-            all_players = sorted(df_filtered["Player Name"].unique())
-            submitted_players = latest_wellness["Name"].unique()
+            st.markdown("### 📊 Daily Compliance")
 
-            # Name matching (Forms names may differ slightly from GPS names)
-            submitted_lower = [n.lower().strip() for n in submitted_players]
-            missing_players = [p for p in all_players if p.lower().strip() not in submitted_lower]
+            # Use current squad list, match against submitted names (case-insensitive)
+            submitted_lower = {n.lower().strip(): n for n in latest_wellness["Name"].unique()}
+            
+            submitted_players = []
+            missing_players = []
+            for player in CURRENT_SQUAD:
+                if player.lower().strip() in submitted_lower:
+                    submitted_players.append(player)
+                else:
+                    missing_players.append(player)
+            
+            total_squad = len(CURRENT_SQUAD)
+            n_submitted = len(submitted_players)
+            n_missing = len(missing_players)
+            compliance_pct = (n_submitted / total_squad * 100) if total_squad > 0 else 0
 
-            comp_col1, comp_col2 = st.columns(2)
+            # Summary metrics
+            comp_col1, comp_col2, comp_col3 = st.columns(3)
             with comp_col1:
-                st.metric("✅ Submitted", len(submitted_players))
+                st.metric("✅ Submitted", f"{n_submitted} / {total_squad}")
             with comp_col2:
-                st.metric("❌ Missing", len(missing_players))
+                st.metric("❌ Missing", n_missing)
+            with comp_col3:
+                st.metric("📊 Compliance", f"{compliance_pct:.0f}%")
+
+            # Visual: submitted players (green) and missing players (red)
+            if submitted_players:
+                submitted_html = "<div style='display:flex;flex-wrap:wrap;gap:0.4rem;margin:0.5rem 0;'>"
+                for p in submitted_players:
+                    submitted_html += (
+                        f"<span style='background:#e8f5e9;color:#2e7d32;padding:4px 10px;"
+                        f"border-radius:6px;font-size:0.8rem;font-weight:600;border:1px solid #c8e6c9;'>"
+                        f"✅ {p}</span>"
+                    )
+                submitted_html += "</div>"
+                st.markdown(submitted_html, unsafe_allow_html=True)
 
             if missing_players:
-                st.markdown("**Players who haven't submitted today:**")
-                st.markdown(", ".join(missing_players))
+                st.markdown("")
+                st.markdown("**Not yet submitted:**")
+                missing_html = "<div style='display:flex;flex-wrap:wrap;gap:0.4rem;margin:0.5rem 0;'>"
+                for p in missing_players:
+                    missing_html += (
+                        f"<span style='background:#ffebee;color:#c62828;padding:4px 10px;"
+                        f"border-radius:6px;font-size:0.8rem;font-weight:600;border:1px solid #ffcdd2;'>"
+                        f"❌ {p}</span>"
+                    )
+                missing_html += "</div>"
+                st.markdown(missing_html, unsafe_allow_html=True)
 
             # History table
             st.markdown("---")
