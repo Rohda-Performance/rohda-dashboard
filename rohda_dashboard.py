@@ -733,39 +733,40 @@ with tab4:
             cards_html += "</div>"
             st.markdown(cards_html, unsafe_allow_html=True)
 
-            # Compliance check
+            # ---- TODAY'S COMPLIANCE ----
             st.markdown("---")
-            st.markdown("### 📊 Daily Compliance")
+            st.markdown("### 📊 Today's Compliance")
 
-            # Use current squad list, match against submitted names (case-insensitive)
-            submitted_lower = {n.lower().strip(): n for n in latest_wellness["Name"].unique()}
-            
-            submitted_players = []
-            missing_players = []
+            # Filter wellness data to today only
+            from datetime import date
+            today = date.today()
+            today_submissions = df_wellness[df_wellness["Date"] == today] if "Date" in df_wellness.columns else pd.DataFrame()
+            today_names = {n.lower().strip(): n for n in today_submissions["Name"].unique()} if len(today_submissions) > 0 else {}
+
+            submitted_today = []
+            missing_today = []
             for player in CURRENT_SQUAD:
-                if player.lower().strip() in submitted_lower:
-                    submitted_players.append(player)
+                if player.lower().strip() in today_names:
+                    submitted_today.append(player)
                 else:
-                    missing_players.append(player)
-            
+                    missing_today.append(player)
+
             total_squad = len(CURRENT_SQUAD)
-            n_submitted = len(submitted_players)
-            n_missing = len(missing_players)
+            n_submitted = len(submitted_today)
+            n_missing = len(missing_today)
             compliance_pct = (n_submitted / total_squad * 100) if total_squad > 0 else 0
 
-            # Summary metrics
             comp_col1, comp_col2, comp_col3 = st.columns(3)
             with comp_col1:
-                st.metric("✅ Submitted", f"{n_submitted} / {total_squad}")
+                st.metric("✅ Submitted today", f"{n_submitted} / {total_squad}")
             with comp_col2:
-                st.metric("❌ Missing", n_missing)
+                st.metric("❌ Missing today", n_missing)
             with comp_col3:
-                st.metric("📊 Compliance", f"{compliance_pct:.0f}%")
+                st.metric("📊 Today's rate", f"{compliance_pct:.0f}%")
 
-            # Visual: submitted players (green) and missing players (red)
-            if submitted_players:
+            if submitted_today:
                 submitted_html = "<div style='display:flex;flex-wrap:wrap;gap:0.4rem;margin:0.5rem 0;'>"
-                for p in submitted_players:
+                for p in submitted_today:
                     submitted_html += (
                         f"<span style='background:#e8f5e9;color:#2e7d32;padding:4px 10px;"
                         f"border-radius:6px;font-size:0.8rem;font-weight:600;border:1px solid #c8e6c9;'>"
@@ -774,11 +775,11 @@ with tab4:
                 submitted_html += "</div>"
                 st.markdown(submitted_html, unsafe_allow_html=True)
 
-            if missing_players:
+            if missing_today:
                 st.markdown("")
-                st.markdown("**Not yet submitted:**")
+                st.markdown("**Not yet submitted today:**")
                 missing_html = "<div style='display:flex;flex-wrap:wrap;gap:0.4rem;margin:0.5rem 0;'>"
-                for p in missing_players:
+                for p in missing_today:
                     missing_html += (
                         f"<span style='background:#ffebee;color:#c62828;padding:4px 10px;"
                         f"border-radius:6px;font-size:0.8rem;font-weight:600;border:1px solid #ffcdd2;'>"
@@ -786,6 +787,75 @@ with tab4:
                     )
                 missing_html += "</div>"
                 st.markdown(missing_html, unsafe_allow_html=True)
+
+            # ---- HISTORICAL COMPLIANCE TRACKER ----
+            st.markdown("---")
+            st.markdown("### 📅 Compliance Tracker (all time)")
+
+            if "Date" in df_wellness.columns and len(df_wellness) > 0:
+                # Get all unique dates where at least one submission exists
+                all_dates = sorted(df_wellness["Date"].dropna().unique())
+                n_total_days = len(all_dates)
+
+                if n_total_days > 0:
+                    # For each player, count how many unique dates they submitted
+                    compliance_data = []
+                    for player in CURRENT_SQUAD:
+                        player_submissions = df_wellness[df_wellness["Name"].str.lower().str.strip() == player.lower().strip()]
+                        days_submitted = player_submissions["Date"].nunique() if len(player_submissions) > 0 else 0
+                        days_missed = n_total_days - days_submitted
+                        pct = (days_submitted / n_total_days * 100) if n_total_days > 0 else 0
+                        compliance_data.append({
+                            "Player": player,
+                            "Submitted": days_submitted,
+                            "Missed": days_missed,
+                            "Total Days": n_total_days,
+                            "Compliance %": round(pct, 1),
+                        })
+
+                    comp_df = pd.DataFrame(compliance_data).sort_values("Compliance %", ascending=False)
+
+                    # Render as styled table
+                    comp_rows = ""
+                    for _, row in comp_df.iterrows():
+                        pct = row["Compliance %"]
+                        if pct >= 80:
+                            bar_color = ROHDA_GREEN
+                        elif pct >= 50:
+                            bar_color = ROHDA_YELLOW
+                        else:
+                            bar_color = ROHDA_RED
+                        comp_rows += (
+                            f"<tr>"
+                            f"<td style='padding:5px 8px;font-weight:600;'>{row['Player']}</td>"
+                            f"<td style='padding:5px 8px;text-align:center;'>{row['Submitted']}</td>"
+                            f"<td style='padding:5px 8px;text-align:center;'>{row['Missed']}</td>"
+                            f"<td style='padding:5px 8px;text-align:center;'>{row['Total Days']}</td>"
+                            f"<td style='padding:5px 8px;width:180px;'>"
+                            f"<div style='background:#eee;border-radius:4px;height:20px;position:relative;'>"
+                            f"<div style='background:{bar_color};border-radius:4px;height:20px;width:{pct}%;'></div>"
+                            f"<span style='position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);"
+                            f"font-size:0.75rem;font-weight:700;color:#333;'>{pct:.0f}%</span>"
+                            f"</div></td>"
+                            f"</tr>"
+                        )
+
+                    comp_table = (
+                        f"<table style='width:100%;border-collapse:collapse;background:white;border-radius:10px;"
+                        f"overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.06);'>"
+                        f"<tr style='background:{ROHDA_RED};color:white;'>"
+                        f"<th style='padding:8px;text-align:left;'>Player</th>"
+                        f"<th style='padding:8px;text-align:center;'>✅ Days</th>"
+                        f"<th style='padding:8px;text-align:center;'>❌ Missed</th>"
+                        f"<th style='padding:8px;text-align:center;'>📅 Total</th>"
+                        f"<th style='padding:8px;text-align:center;'>Compliance</th>"
+                        f"</tr>{comp_rows}</table>"
+                    )
+                    st.markdown(comp_table, unsafe_allow_html=True)
+                else:
+                    st.info("No submission days recorded yet.")
+            else:
+                st.info("No historical data available yet.")
 
             # History table
             st.markdown("---")
