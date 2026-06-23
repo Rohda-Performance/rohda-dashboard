@@ -226,7 +226,7 @@ CURRENT_SQUAD = [
     "Tyrese Gijsbertha",
     "Wesley Hansler",
 ]
-WELLNESS_START_DATE = date(2026, 6, 22)  # First official day of wellness tracking
+WELLNESS_START_DATE = date(2026, 6, 23)  # First official day of wellness tracking
 
 # --- Data Loading ---
 st.markdown("---")
@@ -793,15 +793,16 @@ with tab4:
             st.markdown("### 📅 Compliance Tracker (all time)")
 
             if "Date" in df_wellness.columns and len(df_wellness) > 0:
-                # Get all unique dates where at least one submission exists
-                all_dates = sorted(df_wellness["Date"].dropna().unique())
+                # Only count dates from the official start date onwards
+                wellness_since_start = df_wellness[df_wellness["Date"] >= WELLNESS_START_DATE]
+                all_dates = sorted(wellness_since_start["Date"].dropna().unique())
                 n_total_days = len(all_dates)
 
                 if n_total_days > 0:
                     # For each player, count how many unique dates they submitted
                     compliance_data = []
                     for player in CURRENT_SQUAD:
-                        player_submissions = df_wellness[df_wellness["Name"].str.lower().str.strip() == player.lower().strip()]
+                        player_submissions = wellness_since_start[wellness_since_start["Name"].str.lower().str.strip() == player.lower().strip()]
                         days_submitted = player_submissions["Date"].nunique() if len(player_submissions) > 0 else 0
                         days_missed = n_total_days - days_submitted
                         pct = (days_submitted / n_total_days * 100) if n_total_days > 0 else 0
