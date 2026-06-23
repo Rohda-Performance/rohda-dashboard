@@ -820,7 +820,7 @@ with tab4:
                             "Compliance %": round(pct, 1),
                         })
 
-                    comp_df = pd.DataFrame(compliance_data).sort_values("Compliance %", ascending=False)
+                    comp_df = pd.DataFrame(compliance_data).sort_values("Player", ascending=True)
 
                     # Render as styled table
                     comp_rows = ""
