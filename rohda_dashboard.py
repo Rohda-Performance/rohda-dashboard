@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from datetime import datetime
+from datetime import datetime, date
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -226,6 +226,7 @@ CURRENT_SQUAD = [
     "Tyrese Gijsbertha",
     "Wesley Hansler",
 ]
+WELLNESS_START_DATE = date(2026, 6, 22)  # First official day of wellness tracking
 
 # --- Data Loading ---
 st.markdown("---")
@@ -738,7 +739,6 @@ with tab4:
             st.markdown("### 📊 Today's Compliance")
 
             # Filter wellness data to today only
-            from datetime import date
             today = date.today()
             today_submissions = df_wellness[df_wellness["Date"] == today] if "Date" in df_wellness.columns else pd.DataFrame()
             today_names = {n.lower().strip(): n for n in today_submissions["Name"].unique()} if len(today_submissions) > 0 else {}
