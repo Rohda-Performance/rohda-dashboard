@@ -124,7 +124,8 @@ def convert_statsports_csv(csv_file):
     
     converted["Session Date"] = pd.to_datetime(converted["Session Date"], dayfirst=True)
     date_sample = converted["Session Date"].iloc[0]
-    if date_sample.month >= 7:
+    # Season starts June 22 (preseason). After June 21 = new season.
+    if date_sample.month > 6 or (date_sample.month == 6 and date_sample.day >= 22):
         season = f"{date_sample.year}-{date_sample.year + 1}"
     else:
         season = f"{date_sample.year - 1}-{date_sample.year}"
